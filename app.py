@@ -1,50 +1,57 @@
 import streamlit as st
+import requests
 import random
 
-st.set_page_config(page_title="AI Trading Bot", layout="centered")
+st.title("📊 AI Trading Bot (Online Version)")
 
-st.title("📊 AI Trading Bot (Simple Version)")
+symbol = st.text_input("Stock Symbol", "AAPL")
 
-symbol = st.text_input("Enter Stock Symbol", "AAPL")
+# --- REAL PRICE FROM FREE API ---
+def get_price(symbol):
+    try:
+        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
+        data = requests.get(url).json()
+        return data["quoteResponse"]["result"][0]["regularMarketPrice"]
+    except:
+        return None
 
 if st.button("Analyze"):
 
-    # fake price (we will upgrade later)
-    price = 100 + random.uniform(-5, 5)
+    price = get_price(symbol)
 
-    # simple AI logic
-    trend = random.choice(["bullish", "bearish", "sideways"])
-    sentiment = random.choice(["positive", "negative", "neutral"])
+    if price is None:
+        st.error("Could not fetch price. Try AAPL, TSLA, MSFT")
+    else:
 
-    score = 0.5
+        trend = random.choice(["bullish", "bearish"])
+        sentiment = random.choice(["positive", "negative", "neutral"])
 
-    if trend == "bullish":
-        score += 0.2
-    if trend == "bearish":
-        score -= 0.2
+        score = 0.5
 
-    if sentiment == "positive":
-        score += 0.2
-    if sentiment == "negative":
-        score -= 0.2
+        if trend == "bullish":
+            score += 0.2
+        if sentiment == "positive":
+            score += 0.2
+        if trend == "bearish":
+            score -= 0.2
+        if sentiment == "negative":
+            score -= 0.2
 
-    decision = "HOLD"
-    if score > 0.65:
-        decision = "BUY"
-    elif score < 0.35:
-        decision = "SELL"
+        decision = "HOLD"
+        if score > 0.65:
+            decision = "BUY"
+        elif score < 0.35:
+            decision = "SELL"
 
-    stop_loss = price * 0.98
-    take_profit = price * 1.04
+        stop_loss = price * 0.98
+        take_profit = price * 1.04
 
-    st.subheader("RESULT")
-
-    st.write("Symbol:", symbol)
-    st.write("Price:", round(price, 2))
-    st.write("Trend:", trend)
-    st.write("Sentiment:", sentiment)
-    st.write("Decision:", decision)
-    st.write("Confidence Score:", round(score, 2))
-
-    st.write("Stop Loss:", round(stop_loss, 2))
-    st.write("Take Profit:", round(take_profit, 2))
+        st.subheader("RESULT")
+        st.write("Symbol:", symbol)
+        st.write("Price:", round(price, 2))
+        st.write("Trend:", trend)
+        st.write("Sentiment:", sentiment)
+        st.write("Decision:", decision)
+        st.write("Confidence:", round(score, 2))
+        st.write("Stop Loss:", round(stop_loss, 2))
+        st.write("Take Profit:", round(take_profit, 2))
