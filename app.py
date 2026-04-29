@@ -26,7 +26,9 @@ if st.button("Analyze"):
         trend = random.choice(["bullish", "bearish"])
         sentiment = random.choice(["positive", "negative", "neutral"])
 
-        score = 0.5
+       
+...
+score = max(0, min(1, score))score = 0.5
 
         if trend == "bullish":
             score += 0.2
