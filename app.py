@@ -2,27 +2,36 @@ import streamlit as st
 import requests
 import random
 
-st.set_page_config(page_title="AI Trading Scanner", layout="wide")
+st.set_page_config(page_title="AI Trading Platform", layout="wide")
 
-st.title("📊 AI Trading Scanner v2 (Budget + Multi-Stock)")
+st.title("📊 AI Trading Platform (Pro Version)")
 
-# --- LARGE STOCK LIST (you can expand this later) ---
+# -----------------------------
+# STOCK UNIVERSE
+# -----------------------------
 STOCKS = [
     "AAPL","MSFT","TSLA","AMZN","NVDA","GOOGL","META","NFLX",
-    "AMD","INTC","UBER","DIS","BA","JPM","V","MA"
+    "AMD","INTC","JPM","V","MA","DIS","BA","UBER"
 ]
 
-# --- SAFE PRICE API (WORKS IN STREAMLIT) ---
+# -----------------------------
+# PRICE FETCH (SAFE)
+# -----------------------------
 def get_price(symbol):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
         data = requests.get(url, timeout=5).json()
-        return float(data["quoteResponse"]["result"][0]["regularMarketPrice"])
+        result = data["quoteResponse"]["result"]
+        if not result:
+            return None
+        return float(result[0]["regularMarketPrice"])
     except:
         return None
 
-# --- AI SCORING ENGINE ---
-def analyze_stock(symbol, price):
+# -----------------------------
+# AI ENGINE
+# -----------------------------
+def analyze(symbol, price):
     trend = random.choice(["bullish", "bearish", "sideways"])
     sentiment = random.choice(["positive", "negative", "neutral"])
 
@@ -47,7 +56,7 @@ def analyze_stock(symbol, price):
     else:
         signal = "HOLD"
 
-    volatility = random.uniform(0.015, 0.03)
+    volatility = random.uniform(0.01, 0.03)
 
     stop_loss = price * (1 - volatility)
     take_profit = price * (1 + volatility * 2)
@@ -61,45 +70,58 @@ def analyze_stock(symbol, price):
         "take_profit": take_profit
     }
 
-# --- USER INPUT ---
-budget = st.number_input("💰 Your Budget ($)", min_value=100, value=1000)
+# -----------------------------
+# UI CONTROLS
+# -----------------------------
+col1, col2 = st.columns(2)
 
-min_score = st.slider("📊 Minimum Confidence Filter", 0, 100, 60)
+with col1:
+    budget = st.number_input("💰 Budget ($)", min_value=100, value=1000)
 
-run = st.button("Scan Market")
+with col2:
+    min_score = st.slider("📊 Min Confidence", 0, 100, 60)
 
-# --- SCAN SYSTEM ---
+run = st.button("🚀 Scan Market")
+
+# -----------------------------
+# RESULTS
+# -----------------------------
 if run:
 
     results = []
 
-    for stock in STOCKS:
+    progress = st.progress(0)
+
+    for i, stock in enumerate(STOCKS):
+
         price = get_price(stock)
 
         if price is None:
             continue
 
+        # FIXED BUDGET LOGIC (IMPORTANT)
         if price > budget:
-            continue  # budget filter
+            continue
 
-        analysis = analyze_stock(stock, price)
+        result = analyze(stock, price)
 
-        if analysis["score"] >= min_score:
-            results.append(analysis)
+        if result["score"] >= min_score:
+            results.append(result)
 
-    # sort best opportunities
+        progress.progress((i + 1) / len(STOCKS))
+
     results.sort(key=lambda x: x["score"], reverse=True)
 
     st.subheader("🔥 Best Opportunities")
 
-    if len(results) == 0:
-        st.warning("No stocks match your budget and filter.")
+    if not results:
+        st.warning("No matches found. Try increasing budget or lowering filter.")
     else:
         for r in results:
             st.markdown("---")
-            st.write("**Stock:**", r["symbol"])
-            st.write("Price:", round(r["price"], 2))
-            st.write("Signal:", r["signal"])
-            st.write("Confidence:", f"{r['score']}%")
-            st.write("Stop Loss:", round(r["stop_loss"], 2))
-            st.write("Take Profit:", round(r["take_profit"], 2))
+            st.write("📌 Stock:", r["symbol"])
+            st.write("💵 Price:", round(r["price"], 2))
+            st.write("📊 Signal:", r["signal"])
+            st.write("🧠 Confidence:", f"{r['score']}%")
+            st.write("🛑 Stop Loss:", round(r["stop_loss"], 2))
+            st.write("🎯 Take Profit:", round(r["take_profit"], 2))
