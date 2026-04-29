@@ -1,10 +1,18 @@
 import streamlit as st
 import requests
 import random
+import pandas as pd
 
 st.set_page_config(page_title="AI Trading Platform", layout="wide")
 
-st.title("📊 AI Trading Platform (Pro Version)")
+# -----------------------------
+# SESSION STATE (WATCHLIST + PORTFOLIO)
+# -----------------------------
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = []
+
+if "portfolio" not in st.session_state:
+    st.session_state.portfolio = {}
 
 # -----------------------------
 # STOCK UNIVERSE
@@ -31,7 +39,7 @@ def get_price(symbol):
 # -----------------------------
 # AI ENGINE
 # -----------------------------
-def analyze(symbol, price):
+def analyze_stock(symbol, price):
     trend = random.choice(["bullish", "bearish", "sideways"])
     sentiment = random.choice(["positive", "negative", "neutral"])
 
@@ -71,57 +79,112 @@ def analyze(symbol, price):
     }
 
 # -----------------------------
-# UI CONTROLS
+# SIDEBAR NAVIGATION
 # -----------------------------
-col1, col2 = st.columns(2)
+page = st.sidebar.radio("Navigation", ["Dashboard", "Scanner", "Watchlist", "Portfolio"])
 
-with col1:
+# =============================
+# DASHBOARD
+# =============================
+if page == "Dashboard":
+    st.title("📊 AI Trading Dashboard")
+
+    st.write("Welcome to your trading system.")
+
+    st.metric("Stocks in Universe", len(STOCKS))
+    st.metric("Watchlist Items", len(st.session_state.watchlist))
+    st.metric("Portfolio Positions", len(st.session_state.portfolio))
+
+# =============================
+# SCANNER
+# =============================
+elif page == "Scanner":
+    st.title("🔍 Market Scanner")
+
     budget = st.number_input("💰 Budget ($)", min_value=100, value=1000)
-
-with col2:
     min_score = st.slider("📊 Min Confidence", 0, 100, 60)
 
-run = st.button("🚀 Scan Market")
+    if st.button("Run Scan"):
 
-# -----------------------------
-# RESULTS
-# -----------------------------
-if run:
+        results = []
 
-    results = []
+        progress = st.progress(0)
 
-    progress = st.progress(0)
+        for i, stock in enumerate(STOCKS):
 
-    for i, stock in enumerate(STOCKS):
+            price = get_price(stock)
+            if price is None:
+                continue
 
-        price = get_price(stock)
+            # FIXED BUDGET FILTER
+            if price > budget:
+                continue
 
-        if price is None:
-            continue
+            result = analyze_stock(stock, price)
 
-        # FIXED BUDGET LOGIC (IMPORTANT)
-        if price > budget:
-            continue
+            if result["score"] >= min_score:
+                results.append(result)
 
-        result = analyze(stock, price)
+            progress.progress((i + 1) / len(STOCKS))
 
-        if result["score"] >= min_score:
-            results.append(result)
+        results.sort(key=lambda x: x["score"], reverse=True)
 
-        progress.progress((i + 1) / len(STOCKS))
+        st.subheader("🔥 Opportunities")
 
-    results.sort(key=lambda x: x["score"], reverse=True)
+        if not results:
+            st.warning("No matches found.")
+        else:
+            for r in results:
+                st.markdown("---")
 
-    st.subheader("🔥 Best Opportunities")
+                st.write("Stock:", r["symbol"])
+                st.write("Price:", round(r["price"], 2))
+                st.write("Signal:", r["signal"])
+                st.write("Confidence:", f"{r['score']}%")
 
-    if not results:
-        st.warning("No matches found. Try increasing budget or lowering filter.")
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    if st.button(f"➕ Watch {r['symbol']}"):
+                        if r["symbol"] not in st.session_state.watchlist:
+                            st.session_state.watchlist.append(r["symbol"])
+
+                with col2:
+                    qty = st.number_input(f"Buy {r['symbol']} qty", 1, 100, key=r["symbol"])
+                    if st.button(f"💰 Add to Portfolio {r['symbol']}"):
+                        st.session_state.portfolio[r["symbol"]] = qty
+
+# =============================
+# WATCHLIST
+# =============================
+elif page == "Watchlist":
+    st.title("⭐ Watchlist")
+
+    if not st.session_state.watchlist:
+        st.info("No stocks in watchlist.")
     else:
-        for r in results:
-            st.markdown("---")
-            st.write("📌 Stock:", r["symbol"])
-            st.write("💵 Price:", round(r["price"], 2))
-            st.write("📊 Signal:", r["signal"])
-            st.write("🧠 Confidence:", f"{r['score']}%")
-            st.write("🛑 Stop Loss:", round(r["stop_loss"], 2))
-            st.write("🎯 Take Profit:", round(r["take_profit"], 2))
+        for stock in st.session_state.watchlist:
+            price = get_price(stock)
+            st.write(stock, "-", price)
+
+# =============================
+# PORTFOLIO
+# =============================
+elif page == "Portfolio":
+    st.title("💼 Portfolio Simulator")
+
+    if not st.session_state.portfolio:
+        st.info("No positions yet.")
+    else:
+        total_value = 0
+
+        for stock, qty in st.session_state.portfolio.items():
+            price = get_price(stock)
+
+            if price:
+                value = price * qty
+                total_value += value
+
+                st.write(stock, "Qty:", qty, "Value:", round(value, 2))
+
+        st.subheader(f"Total Portfolio Value: ${round(total_value, 2)}")
