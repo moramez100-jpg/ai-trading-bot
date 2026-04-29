@@ -1,39 +1,31 @@
 import streamlit as st
+import requests
 import random
-import time
 
-st.set_page_config(page_title="AI Trading Bot", layout="centered")
+st.set_page_config(page_title="AI Trading Scanner", layout="wide")
 
-st.title("📊 AI Trading Bot (Stable Online Version)")
+st.title("📊 AI Trading Scanner v2 (Budget + Multi-Stock)")
 
-symbol = st.text_input("Enter Stock Symbol", "AAPL")
+# --- LARGE STOCK LIST (you can expand this later) ---
+STOCKS = [
+    "AAPL","MSFT","TSLA","AMZN","NVDA","GOOGL","META","NFLX",
+    "AMD","INTC","UBER","DIS","BA","JPM","V","MA"
+]
 
-# --- STABLE PRICE SIMULATION (NO API ERRORS) ---
+# --- SAFE PRICE API (WORKS IN STREAMLIT) ---
 def get_price(symbol):
-    base_prices = {
-        "AAPL": 190,
-        "TSLA": 250,
-        "MSFT": 420,
-        "AMZN": 180,
-        "NVDA": 600
-    }
+    try:
+        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
+        data = requests.get(url, timeout=5).json()
+        return float(data["quoteResponse"]["result"][0]["regularMarketPrice"])
+    except:
+        return None
 
-    base = base_prices.get(symbol.upper(), 100)
-    
-    # small realistic movement
-    noise = random.uniform(-2, 2)
-    return round(base + noise, 2)
-
-if st.button("Analyze"):
-
-    price = get_price(symbol)
-
-    # --- AI LOGIC (IMPROVED BUT STABLE) ---
-
+# --- AI SCORING ENGINE ---
+def analyze_stock(symbol, price):
     trend = random.choice(["bullish", "bearish", "sideways"])
     sentiment = random.choice(["positive", "negative", "neutral"])
 
-    # SCORE OUT OF 100
     score = 50
 
     if trend == "bullish":
@@ -48,33 +40,66 @@ if st.button("Analyze"):
 
     score = max(0, min(100, score))
 
-    # --- RISK MANAGEMENT ---
+    if score > 65:
+        signal = "BUY"
+    elif score < 35:
+        signal = "SELL"
+    else:
+        signal = "HOLD"
+
     volatility = random.uniform(0.015, 0.03)
 
     stop_loss = price * (1 - volatility)
     take_profit = price * (1 + volatility * 2)
 
-    risk_reward = (take_profit - price) / (price - stop_loss)
+    return {
+        "symbol": symbol,
+        "price": price,
+        "score": score,
+        "signal": signal,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit
+    }
 
-    # --- DECISION ENGINE ---
-    if score > 65:
-        decision = "BUY 📈"
-    elif score < 35:
-        decision = "SELL 📉"
+# --- USER INPUT ---
+budget = st.number_input("💰 Your Budget ($)", min_value=100, value=1000)
+
+min_score = st.slider("📊 Minimum Confidence Filter", 0, 100, 60)
+
+run = st.button("Scan Market")
+
+# --- SCAN SYSTEM ---
+if run:
+
+    results = []
+
+    for stock in STOCKS:
+        price = get_price(stock)
+
+        if price is None:
+            continue
+
+        if price > budget:
+            continue  # budget filter
+
+        analysis = analyze_stock(stock, price)
+
+        if analysis["score"] >= min_score:
+            results.append(analysis)
+
+    # sort best opportunities
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    st.subheader("🔥 Best Opportunities")
+
+    if len(results) == 0:
+        st.warning("No stocks match your budget and filter.")
     else:
-        decision = "HOLD ⚖️"
-
-    # --- OUTPUT ---
-    st.subheader("RESULT")
-
-    st.write("Symbol:", symbol.upper())
-    st.write("Price:", price)
-    st.write("Trend:", trend)
-    st.write("Sentiment:", sentiment)
-
-    st.write("Decision:", decision)
-    st.write("Confidence:", f"{score}%")
-
-    st.write("Stop Loss:", round(stop_loss, 2))
-    st.write("Take Profit:", round(take_profit, 2))
-    st.write("Risk/Reward:", round(risk_reward, 2))
+        for r in results:
+            st.markdown("---")
+            st.write("**Stock:**", r["symbol"])
+            st.write("Price:", round(r["price"], 2))
+            st.write("Signal:", r["signal"])
+            st.write("Confidence:", f"{r['score']}%")
+            st.write("Stop Loss:", round(r["stop_loss"], 2))
+            st.write("Take Profit:", round(r["take_profit"], 2))
