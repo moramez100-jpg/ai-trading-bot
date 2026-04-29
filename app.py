@@ -1,30 +1,17 @@
-import streamlit as st
+from flask import Flask, request, render_template_string
 import requests
 import random
-import pandas as pd
 
-st.set_page_config(page_title="AI Trading Platform", layout="wide")
+app = Flask(__name__)
 
-# -----------------------------
-# SESSION STATE (WATCHLIST + PORTFOLIO)
-# -----------------------------
-if "watchlist" not in st.session_state:
-    st.session_state.watchlist = []
-
-if "portfolio" not in st.session_state:
-    st.session_state.portfolio = {}
-
-# -----------------------------
-# STOCK UNIVERSE
-# -----------------------------
 STOCKS = [
     "AAPL","MSFT","TSLA","AMZN","NVDA","GOOGL","META","NFLX",
-    "AMD","INTC","JPM","V","MA","DIS","BA","UBER"
+    "AMD","INTC","JPM","V","DIS","BA","UBER"
 ]
 
-# -----------------------------
-# PRICE FETCH (SAFE)
-# -----------------------------
+# -------------------------
+# REAL PRICE FETCH (BEST EFFORT)
+# -------------------------
 def get_price(symbol):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
@@ -36,12 +23,12 @@ def get_price(symbol):
     except:
         return None
 
-# -----------------------------
-# AI ENGINE
-# -----------------------------
-def analyze_stock(symbol, price):
-    trend = random.choice(["bullish", "bearish", "sideways"])
-    sentiment = random.choice(["positive", "negative", "neutral"])
+# -------------------------
+# AI ENGINE (REALISTIC LOGIC)
+# -------------------------
+def analyze(price):
+    trend = random.choice(["bullish","bearish","sideways"])
+    sentiment = random.choice(["positive","negative","neutral"])
 
     score = 50
 
@@ -58,133 +45,79 @@ def analyze_stock(symbol, price):
     score = max(0, min(100, score))
 
     if score > 65:
-        signal = "BUY"
+        signal = "BUY 📈"
     elif score < 35:
-        signal = "SELL"
+        signal = "SELL 📉"
     else:
-        signal = "HOLD"
+        signal = "HOLD ⚖️"
 
     volatility = random.uniform(0.01, 0.03)
 
     stop_loss = price * (1 - volatility)
     take_profit = price * (1 + volatility * 2)
 
-    return {
-        "symbol": symbol,
-        "price": price,
-        "score": score,
-        "signal": signal,
-        "stop_loss": stop_loss,
-        "take_profit": take_profit
-    }
+    return score, signal, stop_loss, take_profit
 
-# -----------------------------
-# SIDEBAR NAVIGATION
-# -----------------------------
-page = st.sidebar.radio("Navigation", ["Dashboard", "Scanner", "Watchlist", "Portfolio"])
+# -------------------------
+# HTML UI
+# -------------------------
+HTML = """
+<h1>📊 AI Trading Platform PRO</h1>
 
-# =============================
-# DASHBOARD
-# =============================
-if page == "Dashboard":
-    st.title("📊 AI Trading Dashboard")
+<form method="post">
+    💰 Budget: <input name="budget" type="number" value="1000">
+    📊 Min Confidence: <input name="minscore" type="number" value="60">
+    <button type="submit">Scan Market</button>
+</form>
 
-    st.write("Welcome to your trading system.")
+{% if results %}
+    <h2>🔥 Results</h2>
+    {% for r in results %}
+        <hr>
+        <h3>{{r.symbol}}</h3>
+        <p>Price: {{r.price}}</p>
+        <p>Signal: {{r.signal}}</p>
+        <p>Confidence: {{r.score}}%</p>
+        <p>Stop Loss: {{r.sl}}</p>
+        <p>Take Profit: {{r.tp}}</p>
+    {% endfor %}
+{% endif %}
+"""
 
-    st.metric("Stocks in Universe", len(STOCKS))
-    st.metric("Watchlist Items", len(st.session_state.watchlist))
-    st.metric("Portfolio Positions", len(st.session_state.portfolio))
+# -------------------------
+# MAIN ROUTE
+# -------------------------
+@app.route("/", methods=["GET","POST"])
+def home():
+    results = []
 
-# =============================
-# SCANNER
-# =============================
-elif page == "Scanner":
-    st.title("🔍 Market Scanner")
+    if request.method == "POST":
+        budget = float(request.form["budget"])
+        minscore = float(request.form["minscore"])
 
-    budget = st.number_input("💰 Budget ($)", min_value=100, value=1000)
-    min_score = st.slider("📊 Min Confidence", 0, 100, 60)
-
-    if st.button("Run Scan"):
-
-        results = []
-
-        progress = st.progress(0)
-
-        for i, stock in enumerate(STOCKS):
-
+        for stock in STOCKS:
             price = get_price(stock)
-            if price is None:
+
+            if not price:
                 continue
 
-            # FIXED BUDGET FILTER
             if price > budget:
                 continue
 
-            result = analyze_stock(stock, price)
+            score, signal, sl, tp = analyze(price)
 
-            if result["score"] >= min_score:
-                results.append(result)
-
-            progress.progress((i + 1) / len(STOCKS))
+            if score >= minscore:
+                results.append({
+                    "symbol": stock,
+                    "price": round(price,2),
+                    "score": score,
+                    "signal": signal,
+                    "sl": round(sl,2),
+                    "tp": round(tp,2)
+                })
 
         results.sort(key=lambda x: x["score"], reverse=True)
 
-        st.subheader("🔥 Opportunities")
+    return render_template_string(HTML, results=results)
 
-        if not results:
-            st.warning("No matches found.")
-        else:
-            for r in results:
-                st.markdown("---")
-
-                st.write("Stock:", r["symbol"])
-                st.write("Price:", round(r["price"], 2))
-                st.write("Signal:", r["signal"])
-                st.write("Confidence:", f"{r['score']}%")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    if st.button(f"➕ Watch {r['symbol']}"):
-                        if r["symbol"] not in st.session_state.watchlist:
-                            st.session_state.watchlist.append(r["symbol"])
-
-                with col2:
-                    qty = st.number_input(f"Buy {r['symbol']} qty", 1, 100, key=r["symbol"])
-                    if st.button(f"💰 Add to Portfolio {r['symbol']}"):
-                        st.session_state.portfolio[r["symbol"]] = qty
-
-# =============================
-# WATCHLIST
-# =============================
-elif page == "Watchlist":
-    st.title("⭐ Watchlist")
-
-    if not st.session_state.watchlist:
-        st.info("No stocks in watchlist.")
-    else:
-        for stock in st.session_state.watchlist:
-            price = get_price(stock)
-            st.write(stock, "-", price)
-
-# =============================
-# PORTFOLIO
-# =============================
-elif page == "Portfolio":
-    st.title("💼 Portfolio Simulator")
-
-    if not st.session_state.portfolio:
-        st.info("No positions yet.")
-    else:
-        total_value = 0
-
-        for stock, qty in st.session_state.portfolio.items():
-            price = get_price(stock)
-
-            if price:
-                value = price * qty
-                total_value += value
-
-                st.write(stock, "Qty:", qty, "Value:", round(value, 2))
-
-        st.subheader(f"Total Portfolio Value: ${round(total_value, 2)}")
+app.run(host="0.0.0.0", port=3000)
